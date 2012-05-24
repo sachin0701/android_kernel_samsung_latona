@@ -218,6 +218,7 @@ obj-$(CONFIG_MACH_OMAP_ZOOM3)		+= board-zoom.o \
 					   board-zoom-display.o \
 					   board-zoom-debugboard.o
 obj-$(CONFIG_MACH_OMAP_3630SDP)		+= board-3630sdp.o \
+obj-$(CONFIG_MACH_LATONA)		+= board-latona.o \
 					   board-zoom-peripherals.o \
 					   board-zoom-display.o
 obj-$(CONFIG_MACH_CM_T35)		+= board-cm-t35.o
