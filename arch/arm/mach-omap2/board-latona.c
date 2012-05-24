@@ -6,6 +6,12 @@
  * published by the Free Software Foundation.
  */
 
+/*
+ * Modified by Mark "Hill Beast" Kennard
+ *
+ * For Samsung Galaxy SL (Latona)
+ */
+
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
@@ -21,7 +27,7 @@
 #include <plat/gpmc-smc91x.h>
 #include <plat/usb.h>
 
-#include <mach/board-zoom.h>
+#include <mach/board-latona.h>
 
 #include "board-flash.h"
 #include "mux.h"
