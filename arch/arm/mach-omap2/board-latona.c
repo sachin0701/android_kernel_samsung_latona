@@ -143,7 +143,7 @@ static void __init omap_sdp_init(void)
 	usbhs_init(&usbhs_bdata);
 }
 
-MACHINE_START(OMAP_3630SDP, "Latona board")
+MACHINE_START(LATONA, "Latona board")
 	.atag_offset	= 0x100,
 	.reserve	= omap_reserve,
 	.map_io		= omap3_map_io,
