@@ -143,18 +143,7 @@ static void __init omap_sdp_init(void)
 	usbhs_init(&usbhs_bdata);
 }
 
-/*MACHINE_START(LATONA, "Latona Samsung Board")
->     .phys_io = 0x48000000,
->     .io_pg_offst = ((0xfa000000) >> 18) & 0xfffc,
->     .boot_params = 0x80000100,
->     .fixup = omap_board_fixup,
->     .map_io = omap_board_map_io,
->     .init_irq = omap_board_init_irq,
->     .init_machine = omap_board_init,
->     .timer = &omap_timer,*/
-
-
-MACHINE_START(OMAP_3630SDP, "OMAP 3630SDP board")
+MACHINE_START(OMAP_3630SDP, "Latona board")
 	.atag_offset	= 0x100,
 	.reserve	= omap_reserve,
 	.map_io		= omap3_map_io,
