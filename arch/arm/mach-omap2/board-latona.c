@@ -135,14 +135,24 @@ static void __init omap_sdp_init(void)
 	omap_board_config = sdp_config;
 	omap_board_config_size = ARRAY_SIZE(sdp_config);
 	zoom_peripherals_init();
-	omap_sdrc_init(h8mbx00u0mer0em_sdrc_params,
-				  h8mbx00u0mer0em_sdrc_params);
+	omap_sdrc_init(hyb18m512160af6_sdrc_params, NULL);
 	zoom_display_init();
 	board_smc91x_init();
 	board_flash_init(sdp_flash_partitions, chip_sel_sdp, NAND_BUSWIDTH_16);
 	enable_board_wakeup_source();
 	usbhs_init(&usbhs_bdata);
 }
+
+/*MACHINE_START(LATONA, "Latona Samsung Board")
+>     .phys_io = 0x48000000,
+>     .io_pg_offst = ((0xfa000000) >> 18) & 0xfffc,
+>     .boot_params = 0x80000100,
+>     .fixup = omap_board_fixup,
+>     .map_io = omap_board_map_io,
+>     .init_irq = omap_board_init_irq,
+>     .init_machine = omap_board_init,
+>     .timer = &omap_timer,*/
+
 
 MACHINE_START(OMAP_3630SDP, "OMAP 3630SDP board")
 	.atag_offset	= 0x100,
