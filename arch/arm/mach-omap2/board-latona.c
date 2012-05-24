@@ -24,7 +24,7 @@
 
 #include "common.h"
 #include <plat/board.h>
-#include <plat/gpmc-smc91x.h>
+#include <plat/gpmc-latona.h>
 #include <plat/usb.h>
 
 #include <mach/board-latona.h>
