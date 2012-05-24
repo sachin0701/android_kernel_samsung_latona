@@ -1,4 +1,9 @@
 #!/bin/sh
+#
+# Kernel build script
+#
+# By Mark "Hill Beast" Kennard
+#
 
 if [ -z $1 ]; then
 	if [ -z $KBUILD_BUILD_VERSION ]; then
