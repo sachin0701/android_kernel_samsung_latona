@@ -28,6 +28,10 @@
 #include <plat/usb.h>
 
 #include <mach/board-latona.h>
+#include <mach/sec_log_buf.h>
+#include <mach/sec_param.h>
+#include <mach/sec_common.h>
+#include <mach/sec_mux.h>
 
 #include "board-flash.h"
 #include "mux.h"
