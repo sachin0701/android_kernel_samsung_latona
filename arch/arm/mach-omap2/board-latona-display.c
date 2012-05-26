@@ -107,8 +107,6 @@ static struct omap_dss_device latona_lcd_device = {
 	.phy.dpi.data_lines	= 24,
 	.platform_enable	= NULL,
 	.platform_disable	= NULL,
-	.platform_enable	= latona_panel_enable_lcd,
-	.platform_disable	= latona_panel_disable_lcd,
 	.max_backlight_level	= 100,
 	.set_backlight		= latona_set_bl_intensity,
 };
