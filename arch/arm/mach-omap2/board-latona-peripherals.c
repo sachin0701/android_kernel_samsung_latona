@@ -27,7 +27,7 @@
 #include "common.h"
 #include <plat/usb.h>
 
-#include <mach/board-zoom.h>
+#include <mach/board-latona.h>
 
 #include "mux.h"
 #include "hsmmc.h"
@@ -247,7 +247,7 @@ static int zoom_twl_gpio_setup(struct device *dev,
 /* EXTMUTE callback function */
 static void zoom2_set_hs_extmute(int mute)
 {
-	gpio_set_value(ZOOM2_HEADSET_EXTMUTE_GPIO, mute);
+	// gpio_set_value(ZOOM2_HEADSET_EXTMUTE_GPIO, mute);
 }
 
 static struct twl4030_gpio_platform_data zoom_gpio_data = {
