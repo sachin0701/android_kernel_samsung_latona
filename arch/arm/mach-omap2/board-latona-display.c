@@ -133,7 +133,7 @@ static struct spi_board_info nec_8048_spi_board_info[] __initdata = {
 	},
 };
 
-void __init zoom_display_init(void)
+void __init latona_display_init(void)
 {
 	omap_display_init(&zoom_dss_data);
 	spi_register_board_info(nec_8048_spi_board_info,

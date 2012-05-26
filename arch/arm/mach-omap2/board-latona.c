@@ -138,9 +138,9 @@ static void __init omap_sdp_init(void)
 	omap3_mux_init(board_mux, OMAP_PACKAGE_CBP);
 	omap_board_config = sdp_config;
 	omap_board_config_size = ARRAY_SIZE(sdp_config);
-	zoom_peripherals_init();
+	latona_peripherals_init();
 	omap_sdrc_init(hyb18m512160af6_sdrc_params, NULL);
-	zoom_display_init();
+	latona_display_init();
 	board_smc91x_init();
 	board_flash_init(sdp_flash_partitions, chip_sel_sdp, NAND_BUSWIDTH_16);
 	enable_board_wakeup_source();

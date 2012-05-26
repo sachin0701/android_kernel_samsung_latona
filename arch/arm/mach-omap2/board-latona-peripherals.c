@@ -294,7 +294,7 @@ static void enable_board_wakeup_source(void)
 		OMAP_WAKEUP_EN | OMAP_PIN_INPUT_PULLUP);
 }
 
-void __init zoom_peripherals_init(void)
+void __init latona_peripherals_init(void)
 {
 	int ret;
 
