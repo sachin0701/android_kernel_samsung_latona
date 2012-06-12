@@ -23,6 +23,34 @@
 
 #include <linux/i2c.h>
 #include <linux/i2c-omap.h>
+#include <linux/hwspinlock.h>
+
+#define OMAP5_I2C_PULLUP_DIS		1
+#define OMAP5_I2C_PULLUP_EN		0
+#define OMAP5_I2C_GLITCH_FREE_DIS	0
+#define OMAP5_I2C_GLITCH_FREE_EN	1
+
+struct omap_i2c_bus_board_data {
+	struct hwspinlock *handle;
+	int (*hwspin_lock_timeout)(struct hwspinlock *hwlock, unsigned int to);
+	void (*hwspin_unlock)(struct hwspinlock *hwlock);
+};
+
+/**
+ * omap_register_i2c_bus_board_data - register hwspinlock data
+ * @bus_id: bus id counting from number 1
+ * @pdata: pointer to the I2C bus board data
+ */
+void omap_register_i2c_bus_board_data(int bus_id,
+			struct omap_i2c_bus_board_data *pdata);
+
+/**
+ * omap_i2c_get_hwspinlockid - Get HWSPINLOCK ID for I2C device
+ * @dev: I2C device
+ *
+ * returns the hwspinlock id or -1 if does not exist
+ */
+int omap_i2c_get_hwspinlockid(struct device *dev);
 
 #if defined(CONFIG_I2C_OMAP) || defined(CONFIG_I2C_OMAP_MODULE)
 extern int omap_register_i2c_bus(int bus_id, u32 clkrate,
@@ -49,11 +77,19 @@ struct omap_i2c_dev_attr {
 	u8	fifo_depth;
 	u32	flags;
 };
+enum omap_i2c_pullup_values {
+	I2C_PULLUP_STD_4K5_FAST_1K66 = 0,
+	I2C_PULLUP_STD_2K1_FAST_920OM,
+	I2C_PULLUP_STD_860_OM_FAST_500_OM,
+	I2C_PULLUP_STD_NA_FAST_300_OM
+};
 
 void __init omap1_i2c_mux_pins(int bus_id);
 void __init omap2_i2c_mux_pins(int bus_id);
 
 struct omap_hwmod;
 int omap_i2c_reset(struct omap_hwmod *oh);
+void omap2_i2c_pullup(int bus_id, enum omap_i2c_pullup_values pullup);
+void omap5_i2c_pullup(int bus_id, int enable, int glitch_free);
 
 #endif /* __ASM__ARCH_OMAP_I2C_H */

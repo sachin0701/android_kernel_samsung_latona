@@ -11,6 +11,7 @@
 #include "mux2430.h"
 #include "mux34xx.h"
 #include "mux44xx.h"
+#include "mux54xx.h"
 
 #define OMAP_MUX_TERMINATOR	0xffff
 
@@ -85,6 +86,7 @@
  */
 #define OMAP_MUX_REG_8BIT		(1 << 0)
 #define OMAP_MUX_GPIO_IN_MODE3		(1 << 1)
+#define OMAP_MUX_GPIO_IN_MODE6		(1 << 2)
 
 /**
  * struct omap_board_data - board specific device data
@@ -225,7 +227,17 @@ omap_hwmod_mux_init(struct omap_device_pad *bpads, int nr_pads);
  */
 void omap_hwmod_mux(struct omap_hwmod_mux_info *hmux, u8 state);
 
+int omap_mux_get_by_name(const char *muxname,
+		struct omap_mux_partition **found_partition,
+		struct omap_mux **found_mux);
 #else
+
+static inline int omap_mux_get_by_name(const char *muxname,
+		struct omap_mux_partition **found_partition,
+		struct omap_mux **found_mux)
+{
+	return 0;
+}
 
 static inline int omap_mux_init_gpio(int gpio, int val)
 {
@@ -328,6 +340,15 @@ int omap3_mux_init(struct omap_board_mux *board_mux, int flags);
  * @flags:		OMAP package type used for the board
  */
 int omap4_mux_init(struct omap_board_mux *board_subset,
+	struct omap_board_mux *board_wkup_subset, int flags);
+
+/**
+ * omap5_mux_init() - initialize mux system with board specific set
+ * @board_subset:	Board specific mux table
+ * @board_wkup_subset:	Board specific mux table for wakeup instance
+ * @flags:		OMAP package type used for the board
+ */
+int omap5_mux_init(struct omap_board_mux *board_subset,
 	struct omap_board_mux *board_wkup_subset, int flags);
 
 /**

@@ -18,6 +18,8 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/platform_data/omap4-keypad.h>
+#include <linux/pm_runtime.h>
+#include <media/omap3isp.h>
 
 #include <mach/hardware.h>
 #include <mach/irqs.h>
@@ -85,7 +87,7 @@ static int __init omap4_l3_init(void)
 	 * To avoid code running on other OMAPs in
 	 * multi-omap builds
 	 */
-	if (!(cpu_is_omap44xx()))
+	if ((!(cpu_is_omap44xx())) && (!cpu_is_omap54xx()))
 		return -ENODEV;
 
 	for (i = 0; i < L3_MODULES; i++) {
@@ -126,6 +128,8 @@ static struct platform_device omap2cam_device = {
 	.resource	= omap2cam_resources,
 };
 #endif
+
+static struct isp_platform_data bogus_isp_pdata;
 
 #if defined(CONFIG_IOMMU_API)
 
@@ -298,19 +302,58 @@ static inline void omap_init_mbox(void) { }
 static inline void omap_init_sti(void) {}
 
 #if defined(CONFIG_SND_SOC) || defined(CONFIG_SND_SOC_MODULE)
-
 static struct platform_device omap_pcm = {
 	.name	= "omap-pcm-audio",
 	.id	= -1,
 };
 
+#if defined(CONFIG_SND_OMAP_SOC_VXREC)
+static struct platform_device omap_abe_vxrec = {
+	.name   = "omap-abe-vxrec-dai",
+	.id     = -1,
+};
+#endif
+
 static void omap_init_audio(void)
 {
 	platform_device_register(&omap_pcm);
+#if defined(CONFIG_SND_OMAP_SOC_VXREC)
+	platform_device_register(&omap_abe_vxrec);
+#endif
 }
 
 #else
 static inline void omap_init_audio(void) {}
+#endif
+
+#if defined(CONFIG_SND_OMAP_SOC_MCASP) || \
+	defined(CONFIG_SND_OMAP_SOC_MCASP_MODULE)
+static struct omap_device_pm_latency omap_mcasp_latency[] = {
+	{
+		.deactivate_func = omap_device_idle_hwmods,
+		.activate_func = omap_device_enable_hwmods,
+		.flags = OMAP_DEVICE_LATENCY_AUTO_ADJUST,
+	},
+};
+
+static void omap_init_mcasp(void)
+{
+	struct omap_hwmod *oh;
+	struct platform_device *pdev;
+
+	oh = omap_hwmod_lookup("mcasp");
+	if (!oh) {
+		pr_err("could not look up mcasp hw_mod\n");
+		return;
+	}
+
+	pdev = omap_device_build("omap-mcasp", -1, oh, NULL, 0,
+				omap_mcasp_latency,
+				ARRAY_SIZE(omap_mcasp_latency), 0);
+	WARN(IS_ERR(pdev), "Can't build omap_device for omap-mcasp-audio.\n");
+}
+#else
+static inline void omap_init_mcasp(void) {}
 #endif
 
 #if defined(CONFIG_SND_OMAP_SOC_MCPDM) || \
@@ -353,6 +396,67 @@ static void __init omap_init_dmic(void)
 }
 #else
 static inline void omap_init_dmic(void) {}
+#endif
+
+#if defined(CONFIG_SND_OMAP_SOC_ABE) || \
+	defined(CONFIG_SND_OMAP_SOC_ABE_MODULE)
+
+static struct omap_device_pm_latency omap_aess_latency[] = {
+	{
+		.deactivate_func = omap_device_idle_hwmods,
+		.activate_func = omap_device_enable_hwmods,
+		.flags = OMAP_DEVICE_LATENCY_AUTO_ADJUST,
+	},
+};
+
+static void omap_init_aess(void)
+{
+	struct omap_hwmod *oh;
+	struct platform_device *pdev;
+
+	oh = omap_hwmod_lookup("aess");
+	if (!oh) {
+		pr_err("Could not look up aess hw_mod\n");
+		return;
+	}
+
+	pdev = omap_device_build("aess", -1, oh, NULL, 0,
+				omap_aess_latency,
+				ARRAY_SIZE(omap_aess_latency), 0);
+	WARN(IS_ERR(pdev), "Can't build omap_device for omap-aess-audio.\n");
+}
+#else
+static inline void omap_init_aess(void) {}
+#endif
+
+#if defined(CONFIG_SND_OMAP_SOC_OMAP_HDMI) || \
+		defined(CONFIG_SND_OMAP_SOC_OMAP_HDMI_MODULE)
+
+static struct platform_device omap_hdmi_audio = {
+	.name	= "omap-hdmi-audio",
+	.id	= -1,
+};
+
+static void __init omap_init_hdmi_audio(void)
+{
+	struct omap_hwmod *oh;
+	struct platform_device *pdev;
+
+	oh = omap_hwmod_lookup("dss_hdmi");
+	if (!oh) {
+		printk(KERN_ERR "Could not look up dss_hdmi hw_mod\n");
+		return;
+	}
+
+	pdev = omap_device_build("omap-hdmi-audio-dai",
+		-1, oh, NULL, 0, NULL, 0, 0);
+	WARN(IS_ERR(pdev),
+	     "Can't build omap_device for omap-hdmi-audio-dai.\n");
+
+	platform_device_register(&omap_hdmi_audio);
+}
+#else
+static inline void omap_init_hdmi_audio(void) {}
 #endif
 
 #if defined(CONFIG_SPI_OMAP24XX) || defined(CONFIG_SPI_OMAP24XX_MODULE)
@@ -630,6 +734,48 @@ void __init omap242x_init_mmc(struct omap_mmc_platform_data **mmc_data)
 
 #endif
 
+static __init void omap_init_dev(char *name)
+{
+	struct platform_device *pd;
+	struct omap_hwmod *oh;
+
+	oh = omap_hwmod_lookup(name);
+	if (!oh) {
+		pr_err("Could not look up %s hwmod\n", name);
+		return;
+	}
+
+	pd = omap_device_build(name, -1, oh, NULL, 0, NULL, 0, 0);
+	if (IS_ERR(pd))
+		pr_err("Can't build omap_device for %s.\n", name);
+	else
+		pm_runtime_enable(&pd->dev);
+}
+
+static void __init omap_init_fdif(void)
+{
+	if (!cpu_is_omap44xx() && !cpu_is_omap54xx())
+		return;
+
+	omap_init_dev("fdif");
+}
+
+static void __init omap_init_sl2if(void)
+{
+	if (!cpu_is_omap44xx() && !cpu_is_omap54xx())
+		return;
+
+	omap_init_dev("sl2if");
+}
+
+static void __init omap_init_iss(void)
+{
+	if (!cpu_is_omap44xx() && !cpu_is_omap54xx())
+		return;
+
+	omap_init_dev("iss");
+}
+
 /*-------------------------------------------------------------------------*/
 
 #if defined(CONFIG_HDQ_MASTER_OMAP) || defined(CONFIG_HDQ_MASTER_OMAP_MODULE)
@@ -700,10 +846,14 @@ static int __init omap2_init_devices(void)
 	 * please keep these calls, and their implementations above,
 	 * in alphabetical order so they're easier to sort through.
 	 */
+	omap_init_aess();
 	omap_init_audio();
+	omap_init_mcasp();
 	omap_init_mcpdm();
 	omap_init_dmic();
 	omap_init_camera();
+	omap_init_hdmi_audio();
+	omap3_init_camera(&bogus_isp_pdata);
 	omap_init_mbox();
 	omap_init_mcspi();
 	omap_init_pmu();
@@ -712,6 +862,9 @@ static int __init omap2_init_devices(void)
 	omap_init_sham();
 	omap_init_aes();
 	omap_init_vout();
+	omap_init_fdif();
+	omap_init_sl2if();
+	omap_init_iss();
 
 	return 0;
 }

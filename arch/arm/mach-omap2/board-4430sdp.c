@@ -39,6 +39,8 @@
 #include <plat/usb.h>
 #include <plat/mmc.h>
 #include <plat/omap4-keypad.h>
+#include <plat/drm.h>
+#include <plat/remoteproc.h>
 #include <video/omapdss.h>
 #include <video/omap-panel-nokia-dsi.h>
 #include <video/omap-panel-picodlp.h>
@@ -63,6 +65,9 @@
 
 #define GPIO_WIFI_PMENA		54
 #define GPIO_WIFI_IRQ		53
+
+#define FIXED_REG_VBAT_ID	0
+#define FIXED_REG_VWLAN_ID	1
 
 static const int sdp4430_keymap[] = {
 	KEY(0, 0, KEY_E),
@@ -373,7 +378,7 @@ static struct fixed_voltage_config sdp4430_vbat_pdata = {
 
 static struct platform_device sdp4430_vbat = {
 	.name		= "reg-fixed-voltage",
-	.id		= -1,
+	.id		= FIXED_REG_VBAT_ID,
 	.dev = {
 		.platform_data = &sdp4430_vbat_pdata,
 	},
@@ -381,6 +386,16 @@ static struct platform_device sdp4430_vbat = {
 
 static struct platform_device sdp4430_dmic_codec = {
 	.name	= "dmic-codec",
+	.id	= -1,
+};
+
+static struct platform_device sdp4430_spdif_dit_codec = {
+	.name           = "spdif-dit",
+	.id             = -1,
+};
+
+static struct platform_device sdp4430_hdmi_audio_codec = {
+	.name	= "hdmi-audio-codec",
 	.id	= -1,
 };
 
@@ -392,6 +407,7 @@ static struct omap_abe_twl6040_data sdp4430_abe_audio_data = {
 	.has_aux	= ABE_TWL6040_LEFT | ABE_TWL6040_RIGHT,
 	.has_vibra	= ABE_TWL6040_LEFT | ABE_TWL6040_RIGHT,
 
+	.has_abe	= 1,
 	.has_dmic	= 1,
 	.has_hsmic	= 1,
 	.has_mainmic	= 1,
@@ -417,7 +433,9 @@ static struct platform_device *sdp4430_devices[] __initdata = {
 	&sdp4430_leds_pwm,
 	&sdp4430_vbat,
 	&sdp4430_dmic_codec,
+	&sdp4430_spdif_dit_codec,
 	&sdp4430_abe_audio,
+	&sdp4430_hdmi_audio_codec,
 };
 
 static struct omap_musb_board_data musb_board_data = {
@@ -483,7 +501,7 @@ static struct fixed_voltage_config sdp4430_vwlan = {
 
 static struct platform_device omap_vwlan_device = {
 	.name		= "reg-fixed-voltage",
-	.id		= 1,
+	.id		= FIXED_REG_VWLAN_ID,
 	.dev = {
 		.platform_data = &sdp4430_vwlan,
 	},
@@ -615,7 +633,9 @@ static int __init omap4_i2c_init(void)
 			TWL_COMMON_REGULATOR_VANA |
 			TWL_COMMON_REGULATOR_VCXIO |
 			TWL_COMMON_REGULATOR_VUSB |
-			TWL_COMMON_REGULATOR_CLK32KG);
+			TWL_COMMON_REGULATOR_CLK32KG |
+			TWL_COMMON_REGULATOR_V1V8 |
+			TWL_COMMON_REGULATOR_V2V1);
 	omap4_pmic_init("twl6030", &sdp4430_twldata,
 			&twl6040_data, OMAP44XX_IRQ_SYS_2N);
 	omap_register_i2c_bus(2, 400, NULL, 0);
@@ -932,6 +952,18 @@ static void __init omap_4430sdp_init(void)
 
 	if (omap_rev() == OMAP4430_REV_ES1_0)
 		package = OMAP_PACKAGE_CBL;
+
+#if defined(CONFIG_TI_EMIF) || defined(CONFIG_TI_EMIF_MODULE)
+	omap_emif_set_device_details(1, &lpddr2_elpida_2G_S4_x2_info,
+			lpddr2_elpida_2G_S4_timings,
+			ARRAY_SIZE(lpddr2_elpida_2G_S4_timings),
+			&lpddr2_elpida_S4_min_tck, NULL);
+	omap_emif_set_device_details(2, &lpddr2_elpida_2G_S4_x2_info,
+			lpddr2_elpida_2G_S4_timings,
+			ARRAY_SIZE(lpddr2_elpida_2G_S4_timings),
+			&lpddr2_elpida_S4_min_tck, NULL);
+#endif
+
 	omap4_mux_init(board_mux, NULL, package);
 
 	omap4_i2c_init();
@@ -957,13 +989,20 @@ static void __init omap_4430sdp_init(void)
 	if (status)
 		pr_err("Keypad initialization failed: %d\n", status);
 
+	omap_init_dmm_tiler();
 	omap_4430sdp_display_init();
+}
+
+static void __init omap_4430sdp_reserve(void)
+{
+	omap_rproc_reserve_cma(RPROC_CMA_OMAP4);
+	omap_reserve();
 }
 
 MACHINE_START(OMAP_4430SDP, "OMAP4430 4430SDP board")
 	/* Maintainer: Santosh Shilimkar - Texas Instruments Inc */
 	.atag_offset	= 0x100,
-	.reserve	= omap_reserve,
+	.reserve	= omap_4430sdp_reserve,
 	.map_io		= omap4_map_io,
 	.init_early	= omap4430_init_early,
 	.init_irq	= gic_init_irq,

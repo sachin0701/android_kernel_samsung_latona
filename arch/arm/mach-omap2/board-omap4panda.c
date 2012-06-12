@@ -42,6 +42,8 @@
 #include "common.h"
 #include <plat/usb.h>
 #include <plat/mmc.h>
+#include <plat/drm.h>
+#include <plat/remoteproc.h>
 #include <video/omap-panel-dvi.h>
 
 #include "hsmmc.h"
@@ -102,6 +104,7 @@ static struct omap_abe_twl6040_data panda_abe_audio_data = {
 	.has_aux	= ABE_TWL6040_LEFT | ABE_TWL6040_RIGHT,
 	/* PandaBoard: FM RX, PandaBoardES: audio in */
 	.has_afm	= ABE_TWL6040_LEFT | ABE_TWL6040_RIGHT,
+	.has_abe	= 1,
 	/* No jack detection. */
 	.jack_detection	= 0,
 	/* MCLK input is 38.4MHz */
@@ -117,6 +120,12 @@ static struct platform_device panda_abe_audio = {
 	},
 };
 
+static struct platform_device panda_hdmi_audio_codec = {
+	.name	= "hdmi-audio-codec",
+	.id	= -1,
+};
+
+
 static struct platform_device btwilink_device = {
 	.name	= "btwilink",
 	.id	= -1,
@@ -126,6 +135,7 @@ static struct platform_device *panda_devices[] __initdata = {
 	&leds_gpio,
 	&wl1271_device,
 	&panda_abe_audio,
+	&panda_hdmi_audio_codec,
 	&btwilink_device,
 };
 
@@ -323,7 +333,9 @@ static int __init omap4_panda_i2c_init(void)
 			TWL_COMMON_REGULATOR_VANA |
 			TWL_COMMON_REGULATOR_VCXIO |
 			TWL_COMMON_REGULATOR_VUSB |
-			TWL_COMMON_REGULATOR_CLK32KG);
+			TWL_COMMON_REGULATOR_CLK32KG |
+			TWL_COMMON_REGULATOR_V1V8 |
+			TWL_COMMON_REGULATOR_V2V1);
 	omap4_pmic_init("twl6030", &omap4_panda_twldata,
 			&twl6040_data, OMAP44XX_IRQ_SYS_2N);
 	omap_register_i2c_bus(2, 400, NULL, 0);
@@ -554,6 +566,18 @@ static void __init omap4_panda_init(void)
 
 	if (omap_rev() == OMAP4430_REV_ES1_0)
 		package = OMAP_PACKAGE_CBL;
+
+#if defined(CONFIG_TI_EMIF) || defined(CONFIG_TI_EMIF_MODULE)
+	omap_emif_set_device_details(1, &lpddr2_elpida_2G_S4_x2_info,
+			lpddr2_elpida_2G_S4_timings,
+			ARRAY_SIZE(lpddr2_elpida_2G_S4_timings),
+			&lpddr2_elpida_S4_min_tck, NULL);
+	omap_emif_set_device_details(2, &lpddr2_elpida_2G_S4_x2_info,
+			lpddr2_elpida_2G_S4_timings,
+			ARRAY_SIZE(lpddr2_elpida_2G_S4_timings),
+			&lpddr2_elpida_S4_min_tck, NULL);
+#endif
+
 	omap4_mux_init(board_mux, NULL, package);
 
 	omap_panda_wlan_data.irq = gpio_to_irq(GPIO_WIFI_IRQ);
@@ -570,13 +594,20 @@ static void __init omap4_panda_init(void)
 	omap4_twl6030_hsmmc_init(mmc);
 	omap4_ehci_init();
 	usb_musb_init(&musb_board_data);
+	omap_init_dmm_tiler();
 	omap4_panda_display_init();
+}
+
+static void __init omap4_panda_reserve(void)
+{
+	omap_rproc_reserve_cma(RPROC_CMA_OMAP4);
+	omap_reserve();
 }
 
 MACHINE_START(OMAP4_PANDA, "OMAP4 Panda board")
 	/* Maintainer: David Anders - Texas Instruments Inc */
 	.atag_offset	= 0x100,
-	.reserve	= omap_reserve,
+	.reserve	= omap4_panda_reserve,
 	.map_io		= omap4_map_io,
 	.init_early	= omap4430_init_early,
 	.init_irq	= gic_init_irq,

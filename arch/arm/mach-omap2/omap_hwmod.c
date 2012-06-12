@@ -382,6 +382,27 @@ static int _set_module_autoidle(struct omap_hwmod *oh, u8 autoidle,
 }
 
 /**
+ * _enable_module_level_wakeup - enable/disable module level wakeup on hwmod.
+ * @oh: struct omap_hwmod *
+ * @set_wake: bool value indicating to set (true) or clear (false) module level
+ *		wakeup enable
+ *
+ * Set or clear the  module level wakeup capability the
+ * hwmod @oh. This function configures th PM_WKEN reg bits if they
+ * are available from hwmod. No return value
+ */
+static void _enable_module_level_wakeup(struct omap_hwmod *oh, bool set_wake)
+{
+	if (oh->prcm.omap2.module_offs && oh->prcm.omap2.prcm_reg_id &&
+			oh->prcm.omap2.idlest_idle_bit)
+		omap2_prm_enable_prcm_module_wakeup(
+				oh->prcm.omap2.module_offs,
+				oh->prcm.omap2.prcm_reg_id,
+				oh->prcm.omap2.idlest_idle_bit,
+				set_wake);
+}
+
+/**
  * _set_idle_ioring_wakeup - enable/disable IO pad wakeup on hwmod idle for mux
  * @oh: struct omap_hwmod *
  * @set_wake: bool value indicating to set (true) or clear (false) wakeup enable
@@ -565,11 +586,11 @@ static int _init_main_clk(struct omap_hwmod *oh)
 			   oh->name, oh->main_clk);
 		return -EINVAL;
 	}
-
-	if (!oh->_clk->clkdm)
+#ifndef CONFIG_MACH_OMAP_5430ZEBU
+	if (!oh->_clk->clkdm && !oh->clkdm_name)
 		pr_warning("omap_hwmod: %s: missing clockdomain for %s.\n",
-			   oh->main_clk, oh->_clk->name);
-
+			   oh->name, oh->_clk->name);
+#endif
 	return ret;
 }
 
@@ -762,7 +783,7 @@ static void _enable_module(struct omap_hwmod *oh)
  */
 static int _omap4_wait_target_disable(struct omap_hwmod *oh)
 {
-	if (!cpu_is_omap44xx())
+	if (cpu_is_omap24xx() || cpu_is_omap34xx())
 		return 0;
 
 	if (!oh)
@@ -792,7 +813,7 @@ static int _omap4_disable_module(struct omap_hwmod *oh)
 	int v;
 
 	/* The module mode does not exist prior OMAP4 */
-	if (!cpu_is_omap44xx())
+	if (cpu_is_omap24xx() || cpu_is_omap34xx())
 		return -EINVAL;
 
 	if (!oh->clkdm || !oh->prcm.omap4.modulemode)
@@ -1174,7 +1195,6 @@ static int _init_clocks(struct omap_hwmod *oh, void *data)
 		return 0;
 
 	pr_debug("omap_hwmod: %s: looking up clocks\n", oh->name);
-
 	ret |= _init_main_clk(oh);
 	ret |= _init_interface_clks(oh);
 	ret |= _init_opt_clks(oh);
@@ -1221,7 +1241,7 @@ static int _wait_target_ready(struct omap_hwmod *oh)
 		ret = omap2_cm_wait_module_ready(oh->prcm.omap2.module_offs,
 						 oh->prcm.omap2.idlest_reg_id,
 						 oh->prcm.omap2.idlest_idle_bit);
-	} else if (cpu_is_omap44xx()) {
+	} else if (cpu_is_omap44xx() || cpu_is_omap54xx()) {
 		if (!oh->clkdm)
 			return -EINVAL;
 
@@ -1291,13 +1311,16 @@ static int _assert_hardreset(struct omap_hwmod *oh, const char *name)
 	if (cpu_is_omap24xx() || cpu_is_omap34xx())
 		return omap2_prm_assert_hardreset(oh->prcm.omap2.module_offs,
 						  ohri.rst_shift);
-	else if (cpu_is_omap44xx())
+	else if (cpu_is_omap44xx() || cpu_is_omap54xx()) {
 		return omap4_prminst_assert_hardreset(ohri.rst_shift,
 				  oh->clkdm->pwrdm.ptr->prcm_partition,
 				  oh->clkdm->pwrdm.ptr->prcm_offs,
 				  oh->prcm.omap4.rstctrl_offs);
-	else
+	} else {
 		return -EINVAL;
+	}
+
+	return ret;
 }
 
 /**
@@ -1326,7 +1349,7 @@ static int _deassert_hardreset(struct omap_hwmod *oh, const char *name)
 		ret = omap2_prm_deassert_hardreset(oh->prcm.omap2.module_offs,
 						   ohri.rst_shift,
 						   ohri.st_shift);
-	} else if (cpu_is_omap44xx()) {
+	} else if (cpu_is_omap44xx() || cpu_is_omap54xx()) {
 		if (ohri.st_shift)
 			pr_err("omap_hwmod: %s: %s: hwmod data error: OMAP4 does not support st_shift\n",
 			       oh->name, name);
@@ -1367,7 +1390,7 @@ static int _read_hardreset(struct omap_hwmod *oh, const char *name)
 	if (cpu_is_omap24xx() || cpu_is_omap34xx()) {
 		return omap2_prm_is_hardreset_asserted(oh->prcm.omap2.module_offs,
 						       ohri.st_shift);
-	} else if (cpu_is_omap44xx()) {
+	} else if (cpu_is_omap44xx() || cpu_is_omap54xx()) {
 		return omap4_prminst_is_hardreset_asserted(ohri.rst_shift,
 				  oh->clkdm->pwrdm.ptr->prcm_partition,
 				  oh->clkdm->pwrdm.ptr->prcm_offs,
@@ -1375,6 +1398,8 @@ static int _read_hardreset(struct omap_hwmod *oh, const char *name)
 	} else {
 		return -EINVAL;
 	}
+
+	return ret;
 }
 
 /**
@@ -1791,8 +1816,10 @@ static int _setup(struct omap_hwmod *oh, void *data)
 
 	r = _enable(oh);
 	if (r) {
+#ifndef CONFIG_MACH_OMAP_5430ZEBU
 		pr_warning("omap_hwmod: %s: cannot be enabled (%d)\n",
 			   oh->name, oh->_state);
+#endif
 		return 0;
 	}
 
@@ -2484,6 +2511,7 @@ int omap_hwmod_enable_wakeup(struct omap_hwmod *oh)
 		_write_sysconfig(v, oh);
 	}
 
+	_enable_module_level_wakeup(oh, true);
 	_set_idle_ioring_wakeup(oh, true);
 	spin_unlock_irqrestore(&oh->_lock, flags);
 
@@ -2517,6 +2545,7 @@ int omap_hwmod_disable_wakeup(struct omap_hwmod *oh)
 		_write_sysconfig(v, oh);
 	}
 
+	_enable_module_level_wakeup(oh, false);
 	_set_idle_ioring_wakeup(oh, false);
 	spin_unlock_irqrestore(&oh->_lock, flags);
 
@@ -2787,4 +2816,19 @@ int omap_hwmod_pad_route_irq(struct omap_hwmod *oh, int pad_idx, int irq_idx)
 	oh->mux->irqs[pad_idx] = irq_idx;
 
 	return 0;
+}
+
+/**
+ * omap_hwmod_get_main_clk - get pointer to main clock name
+ * @oh: struct omap_hwmod *
+ *
+ * Returns the main clock name assocated with @oh upon success,
+ * or NULL if @oh is NULL.
+ */
+const char *omap_hwmod_get_main_clk(struct omap_hwmod *oh)
+{
+	if (!oh)
+		return NULL;
+
+	return oh->main_clk;
 }

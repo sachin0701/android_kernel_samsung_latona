@@ -293,10 +293,118 @@ static inline void omap_hsmmc_mux(struct omap_mmc_platform_data *mmc_controller,
 	}
 }
 
+static int omap_hsmmc_set_clks_src(struct device *dev, unsigned int id)
+{
+	struct clk *fclk_child;
+	struct clk *fclk_parent;
+	int r;
+	char *child_name;
+	char *parent_name;
+
+	/* Cannot change clock sources for MMC id > 1 */
+	if (id > 1)
+		return 0;
+
+	if (cpu_is_omap54xx()) {
+		parent_name = "dpll_per_m2x2_ck";
+		if (id == 0)
+			child_name = "mmc1_fclk_mux";
+		else
+			child_name = "mmc2_fclk_mux";
+	} else if (cpu_is_omap44xx()) {
+		parent_name = "func_96m_fclk";
+		if (id == 0)
+			child_name = "mmc1_fck";
+		else
+			child_name = "mmc2_fck";
+	} else
+		return 0;
+
+	fclk_parent = clk_get(dev, parent_name);
+	if (IS_ERR_OR_NULL(fclk_parent))
+		return -EINVAL;
+	fclk_child = clk_get(dev, child_name);
+	if (IS_ERR_OR_NULL(fclk_child)) {
+		clk_put(fclk_child);
+		return -EINVAL;
+	}
+
+	r = clk_set_parent(fclk_child, fclk_parent);
+	if (IS_ERR_VALUE(r)) {
+		clk_put(fclk_child);
+		clk_put(fclk_parent);
+		return -EINVAL;
+	}
+	clk_put(fclk_child);
+	clk_put(fclk_parent);
+	return 0;
+}
+
+static int __init
+omap_hsmmc_max_min(u8 slot, unsigned long *max, unsigned long *min)
+{
+	if (cpu_is_omap54xx()) {
+		switch (slot) {
+		case 0:
+		case 1:
+#if defined(OMAP5432_REV_ES1_0)
+			*max = 96000000;
+#else
+			*max = 192000000;
+#endif
+			break;
+		case 2:
+		case 3:
+		case 4:
+			*max = 48000000;
+			break;
+		default:
+			return -EINVAL;
+		}
+	} else if (cpu_is_omap44xx()) {
+		switch (slot) {
+		case 0:
+		case 1:
+			*max = 96000000;
+			break;
+		case 2:
+		case 3:
+		case 4:
+			*max = 48000000;
+			break;
+		default:
+			return -EINVAL;
+		}
+	} else if (cpu_is_omap34xx()) {
+		switch (slot) {
+		case 0:
+		case 1:
+		case 2:
+			*max = 96000000;
+			break;
+		default:
+			return -EINVAL;
+		}
+	} else if (cpu_is_omap24xx()) {
+		switch (slot) {
+		case 0:
+		case 1:
+			*max = 96000000;
+			break;
+		default:
+			return -EINVAL;
+		}
+	} else
+		return -EINVAL;
+	*min = 40000;
+	return 0;
+}
+
 static int __init omap_hsmmc_pdata_init(struct omap2_hsmmc_info *c,
 					struct omap_mmc_platform_data *mmc)
 {
 	char *hc_name;
+	unsigned long max_freq, min_freq;
 
 	hc_name = kzalloc(sizeof(char) * (HSMMC_NAME_LEN + 1), GFP_KERNEL);
 	if (!hc_name) {
@@ -316,8 +424,22 @@ static int __init omap_hsmmc_pdata_init(struct omap2_hsmmc_info *c,
 	mmc->slots[0].pm_caps = c->pm_caps;
 	mmc->slots[0].internal_clock = !c->ext_clock;
 	mmc->dma_mask = 0xffffffff;
-	mmc->max_freq = c->max_freq;
-	if (cpu_is_omap44xx())
+
+	mmc->set_clk_src = omap_hsmmc_set_clks_src;
+	if (omap_hsmmc_max_min(c->mmc - 1, &max_freq, &min_freq)) {
+		pr_err("Invalid mmc slot");
+		kfree(hc_name);
+		return -EINVAL;
+	}
+
+	if (c->max_freq >  0)
+		mmc->max_freq = min(c->max_freq, max_freq);
+	else
+		mmc->max_freq = max_freq;
+	mmc->max_si_freq = max_freq;
+	mmc->min_freq = min_freq;
+
+	if (cpu_is_omap44xx() || cpu_is_omap54xx())
 		mmc->reg_offset = OMAP4_MMC_REG_OFFSET;
 	else
 		mmc->reg_offset = 0;
@@ -368,14 +490,15 @@ static int __init omap_hsmmc_pdata_init(struct omap2_hsmmc_info *c,
 	if (!cpu_is_omap3517() && !cpu_is_omap3505())
 		mmc->slots[0].features |= HSMMC_HAS_PBIAS;
 
-	if (cpu_is_omap44xx() && (omap_rev() > OMAP4430_REV_ES1_0))
+	if ((cpu_is_omap44xx() && (omap_rev() > OMAP4430_REV_ES1_0)) ||
+	    cpu_is_omap54xx())
 		mmc->slots[0].features |= HSMMC_HAS_UPDATED_RESET;
 
 	switch (c->mmc) {
 	case 1:
 		if (mmc->slots[0].features & HSMMC_HAS_PBIAS) {
 			/* on-chip level shifting via PBIAS0/PBIAS1 */
-			if (cpu_is_omap44xx()) {
+			if (cpu_is_omap54xx() || cpu_is_omap44xx()) {
 				mmc->slots[0].before_set_reg =
 						omap4_hsmmc1_before_set_reg;
 				mmc->slots[0].after_set_reg =
@@ -570,7 +693,7 @@ void __init omap_hsmmc_init(struct omap2_hsmmc_info *controllers)
 
 	omap_hsmmc_done = 1;
 
-	if (!cpu_is_omap44xx()) {
+	if (!(cpu_is_omap44xx() || cpu_is_omap54xx())) {
 		if (cpu_is_omap2430()) {
 			control_pbias_offset = OMAP243X_CONTROL_PBIAS_LITE;
 			control_devconf1_offset = OMAP243X_CONTROL_DEVCONF1;
@@ -578,7 +701,7 @@ void __init omap_hsmmc_init(struct omap2_hsmmc_info *controllers)
 			control_pbias_offset = OMAP343X_CONTROL_PBIAS_LITE;
 			control_devconf1_offset = OMAP343X_CONTROL_DEVCONF1;
 		}
-	} else {
+	} else if (cpu_is_omap44xx()) {
 		control_pbias_offset =
 			OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_PBIASLITE;
 		control_mmc1 = OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_MMC1;
@@ -591,6 +714,9 @@ void __init omap_hsmmc_init(struct omap2_hsmmc_info *controllers)
 			OMAP4_SDMMC1_DR1_SPEEDCTRL_MASK |
 			OMAP4_SDMMC1_DR2_SPEEDCTRL_MASK);
 		omap4_ctrl_pad_writel(reg, control_mmc1);
+	} else if (cpu_is_omap54xx()) {
+		control_pbias_offset =
+			OMAP4_CTRL_MODULE_PAD_CORE_CONTROL_PBIASLITE;
 	}
 
 	for (; controllers->mmc; controllers++)

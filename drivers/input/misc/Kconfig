@@ -606,4 +606,58 @@ config INPUT_XEN_KBDDEV_FRONTEND
 	  To compile this driver as a module, choose M here: the
 	  module will be called xen-kbdfront.
 
+config INPUT_PALMAS_PWRBUTTON
+	tristate "PALMAS Power Button Driver"
+	depends on MFD_PALMAS
+	help
+	  Say Y here if you want to eable power key reporting for the palmas
+	  familty of PMICs
+
+config INPUT_BH1780
+	bool "ROHM BH1780GLI ambient light sensor"
+	depends on I2C && SYSFS
+	help
+	  If you say yes here you get support for the ROHM BH1780GLI
+	  ambient light sensor.
+
+config INPUT_BMA180
+	bool "BMA-180 Tri-axis accelerometer"
+	depends on I2C && SYSFS
+	help
+	  Say Y here if you want to use BMA-180 Tri-axis accelerometer
+	  through I2C interface.
+
+config INPUT_BMP085
+       bool "BMP085 digital pressure sensor"
+       depends on I2C && SYSFS
+       help
+         If you say yes here you get support for the Bosch Sensortec
+         BMP086 digital pressure sensor
+
+config INPUT_HMC5843
+	bool "Honeywell HMC5843 3-Axis Magnetometer"
+	depends on I2C && SYSFS
+	select INPUT_POLLDEV
+	help
+	  Say Y here to add support for the Honeywell HMC 5843 3-Axis
+	  Magnetometer (digital compass).
+
+config INPUT_TSL2771
+	tristate "TSL2771 ALS/Proximity Sensor Driver"
+	depends on I2C && SYSFS
+	help
+	  Say Y here if you want to use TSL2771 ALS/Proximity Sensor Driver
+          through I2C interface.
+
+          To compile this driver as a module, choose M here: the
+          module will be called tsl2771.
+
+config INPUT_SFH7741
+	tristate "SFH7741 Proximity sensor"
+	help
+	  Say Y here if you want to use proximity sensor sfh7741.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called sfh7741.
+
 endif

@@ -30,6 +30,7 @@
 #include <plat/mmc.h>
 #include <plat/dmtimer.h>
 #include <plat/common.h>
+#include <plat/iommu.h>
 
 #include "omap_hwmod_common_data.h"
 
@@ -53,6 +54,7 @@ static struct omap_hwmod omap44xx_dmm_hwmod;
 static struct omap_hwmod omap44xx_dsp_hwmod;
 static struct omap_hwmod omap44xx_dss_hwmod;
 static struct omap_hwmod omap44xx_emif_fw_hwmod;
+static struct omap_hwmod omap44xx_fdif_hwmod;
 static struct omap_hwmod omap44xx_hsi_hwmod;
 static struct omap_hwmod omap44xx_ipu_hwmod;
 static struct omap_hwmod omap44xx_iss_hwmod;
@@ -69,6 +71,7 @@ static struct omap_hwmod omap44xx_mmc1_hwmod;
 static struct omap_hwmod omap44xx_mmc2_hwmod;
 static struct omap_hwmod omap44xx_mpu_hwmod;
 static struct omap_hwmod omap44xx_mpu_private_hwmod;
+static struct omap_hwmod omap44xx_sl2if_hwmod;
 static struct omap_hwmod omap44xx_usb_otg_hs_hwmod;
 static struct omap_hwmod omap44xx_usb_host_hs_hwmod;
 static struct omap_hwmod omap44xx_usb_tll_hs_hwmod;
@@ -372,6 +375,14 @@ static struct omap_hwmod_ocp_if omap44xx_iss__l3_main_2 = {
 	.user		= OCP_USER_MPU | OCP_USER_SDMA,
 };
 
+/* fdif -> l3_main_2 */
+static struct omap_hwmod_ocp_if omap44xx_fdif__l3_main_2 = {
+	.master		= &omap44xx_fdif_hwmod,
+	.slave		= &omap44xx_l3_main_2_hwmod,
+	.clk		= "l3_div_ck",
+	.user		= OCP_USER_MPU | OCP_USER_SDMA,
+};
+
 /* iva -> l3_main_2 */
 static struct omap_hwmod_ocp_if omap44xx_iva__l3_main_2 = {
 	.master		= &omap44xx_iva_hwmod,
@@ -420,6 +431,7 @@ static struct omap_hwmod_ocp_if *omap44xx_l3_main_2_slaves[] = {
 	&omap44xx_hsi__l3_main_2,
 	&omap44xx_ipu__l3_main_2,
 	&omap44xx_iss__l3_main_2,
+	&omap44xx_fdif__l3_main_2,
 	&omap44xx_iva__l3_main_2,
 	&omap44xx_l3_main_1__l3_main_2,
 	&omap44xx_l4_cfg__l3_main_2,
@@ -695,7 +707,6 @@ static struct omap_hwmod omap44xx_mpu_private_hwmod = {
  *  elm
  *  emif1
  *  emif2
- *  fdif
  *  gpmc
  *  gpu
  *  hdq1w
@@ -708,7 +719,6 @@ static struct omap_hwmod omap44xx_mpu_private_hwmod = {
  *  prcm_mpu
  *  prm
  *  scrm
- *  sl2if
  *  slimbus1
  *  slimbus2
  *  usb_host_fs
@@ -763,6 +773,27 @@ static struct omap_hwmod_ocp_if *omap44xx_aess_masters[] = {
 
 static struct omap_hwmod_addr_space omap44xx_aess_addrs[] = {
 	{
+		.name		= "dmem",
+		.pa_start	= 0x40180000,
+		.pa_end		= 0x4018ffff
+	},
+	{
+		.name		= "cmem",
+		.pa_start	= 0x401a0000,
+		.pa_end		= 0x401a1fff
+	},
+	{
+		.name		= "smem",
+		.pa_start	= 0x401c0000,
+		.pa_end		= 0x401c5fff
+	},
+	{
+		.name		= "pmem",
+		.pa_start	= 0x401e0000,
+		.pa_end		= 0x401e1fff
+	},
+	{
+		.name		= "mpu",
 		.pa_start	= 0x401f1000,
 		.pa_end		= 0x401f13ff,
 		.flags		= ADDR_TYPE_RT
@@ -781,6 +812,27 @@ static struct omap_hwmod_ocp_if omap44xx_l4_abe__aess = {
 
 static struct omap_hwmod_addr_space omap44xx_aess_dma_addrs[] = {
 	{
+		.name		= "dmem_dma",
+		.pa_start	= 0x49080000,
+		.pa_end		= 0x4908ffff
+	},
+	{
+		.name		= "cmem_dma",
+		.pa_start	= 0x490a0000,
+		.pa_end		= 0x490a1fff
+	},
+	{
+		.name		= "smem_dma",
+		.pa_start	= 0x490c0000,
+		.pa_end		= 0x490c5fff
+	},
+	{
+		.name		= "pmem_dma",
+		.pa_start	= 0x490e0000,
+		.pa_end		= 0x490e1fff
+	},
+	{
+		.name		= "dma",
 		.pa_start	= 0x490f1000,
 		.pa_end		= 0x490f13ff,
 		.flags		= ADDR_TYPE_RT
@@ -1092,9 +1144,39 @@ static struct omap_hwmod omap44xx_dmic_hwmod = {
 };
 
 /*
+ * 'mmu' class
+ * The memory management unit performs virtual to physical address translation
+ * for its requestors (remote processors: i.e, dsp, ipu)
+ * Adding a separate class for that to control the mmu module
+ */
+
+static struct omap_hwmod_class_sysconfig omap44xx_mmu_sysc = {
+	.rev_offs	= 0x000,
+	.sysc_offs	= 0x010,
+	.syss_offs	= 0x014,
+	.sysc_flags	= (SYSC_HAS_CLOCKACTIVITY | SYSC_HAS_SIDLEMODE |
+			   SYSC_HAS_SOFTRESET | SYSC_HAS_AUTOIDLE),
+	.idlemodes	= (SIDLE_FORCE | SIDLE_NO | SIDLE_SMART),
+	.sysc_fields	= &omap_hwmod_sysc_type1,
+};
+
+static struct omap_hwmod_class omap44xx_mmu_hwmod_class = {
+	.name = "mmu",
+	.sysc = &omap44xx_mmu_sysc,
+};
+
+/*
  * 'dsp' class
  * dsp sub-system
  */
+
+/* dsp mmu attr */
+
+static struct omap_mmu_dev_attr omap44xx_dsp_mmu_dev_attr = {
+	.da_start = 0x0,
+	.da_end = 0xfffff000,
+	.nr_tlb_entries = 32,
+};
 
 static struct omap_hwmod_class omap44xx_dsp_hwmod_class = {
 	.name	= "dsp",
@@ -1114,10 +1196,26 @@ static struct omap_hwmod_rst_info omap44xx_dsp_c0_resets[] = {
 	{ .name = "dsp", .rst_shift = 0 },
 };
 
+static struct omap_hwmod_addr_space omap44xx_dsp_addrs[] = {
+	{
+		.pa_start       = 0x4A066000,
+		.pa_end         = 0x4A0660ff,
+		.flags          = ADDR_TYPE_RT
+	},
+	{}
+};
+
 /* dsp -> iva */
 static struct omap_hwmod_ocp_if omap44xx_dsp__iva = {
 	.master		= &omap44xx_dsp_hwmod,
 	.slave		= &omap44xx_iva_hwmod,
+	.clk		= "dpll_iva_m5x2_ck",
+};
+
+/* dsp -> sl2if */
+static struct omap_hwmod_ocp_if omap44xx_dsp__sl2if = {
+	.master		= &omap44xx_dsp_hwmod,
+	.slave		= &omap44xx_sl2if_hwmod,
 	.clk		= "dpll_iva_m5x2_ck",
 };
 
@@ -1126,6 +1224,7 @@ static struct omap_hwmod_ocp_if *omap44xx_dsp_masters[] = {
 	&omap44xx_dsp__l3_main_1,
 	&omap44xx_dsp__l4_abe,
 	&omap44xx_dsp__iva,
+	&omap44xx_dsp__sl2if,
 };
 
 /* l4_cfg -> dsp */
@@ -1133,6 +1232,7 @@ static struct omap_hwmod_ocp_if omap44xx_l4_cfg__dsp = {
 	.master		= &omap44xx_l4_cfg_hwmod,
 	.slave		= &omap44xx_dsp_hwmod,
 	.clk		= "l4_div_ck",
+	.addr		= omap44xx_dsp_addrs,
 	.user		= OCP_USER_MPU | OCP_USER_SDMA,
 };
 
@@ -1149,6 +1249,7 @@ static struct omap_hwmod omap44xx_dsp_c0_hwmod = {
 	.flags		= HWMOD_INIT_NO_RESET,
 	.rst_lines	= omap44xx_dsp_c0_resets,
 	.rst_lines_cnt	= ARRAY_SIZE(omap44xx_dsp_c0_resets),
+	.main_clk	= "dsp_fck",
 	.prcm = {
 		.omap4 = {
 			.rstctrl_offs = OMAP4_RM_TESLA_RSTCTRL_OFFSET,
@@ -1158,7 +1259,7 @@ static struct omap_hwmod omap44xx_dsp_c0_hwmod = {
 
 static struct omap_hwmod omap44xx_dsp_hwmod = {
 	.name		= "dsp",
-	.class		= &omap44xx_dsp_hwmod_class,
+	.class		= &omap44xx_mmu_hwmod_class,
 	.clkdm_name	= "tesla_clkdm",
 	.mpu_irqs	= omap44xx_dsp_irqs,
 	.rst_lines	= omap44xx_dsp_resets,
@@ -1172,6 +1273,7 @@ static struct omap_hwmod omap44xx_dsp_hwmod = {
 			.modulemode   = MODULEMODE_HWCTRL,
 		},
 	},
+	.dev_attr	= &omap44xx_dsp_mmu_dev_attr,
 	.slaves		= omap44xx_dsp_slaves,
 	.slaves_cnt	= ARRAY_SIZE(omap44xx_dsp_slaves),
 	.masters	= omap44xx_dsp_masters,
@@ -1214,7 +1316,7 @@ static struct omap_hwmod_addr_space omap44xx_dss_dma_addrs[] = {
 static struct omap_hwmod_ocp_if omap44xx_l3_main_2__dss = {
 	.master		= &omap44xx_l3_main_2_hwmod,
 	.slave		= &omap44xx_dss_hwmod,
-	.clk		= "dss_fck",
+	.clk		= "l3_div_ck",
 	.addr		= omap44xx_dss_dma_addrs,
 	.user		= OCP_USER_SDMA,
 };
@@ -1259,6 +1361,7 @@ static struct omap_hwmod omap44xx_dss_hwmod = {
 		.omap4 = {
 			.clkctrl_offs = OMAP4_CM_DSS_DSS_CLKCTRL_OFFSET,
 			.context_offs = OMAP4_RM_DSS_DSS_CONTEXT_OFFSET,
+			.modulemode   = MODULEMODE_SWCTRL,
 		},
 	},
 	.opt_clks	= dss_opt_clks,
@@ -1317,7 +1420,7 @@ static struct omap_hwmod_addr_space omap44xx_dss_dispc_dma_addrs[] = {
 static struct omap_hwmod_ocp_if omap44xx_l3_main_2__dss_dispc = {
 	.master		= &omap44xx_l3_main_2_hwmod,
 	.slave		= &omap44xx_dss_dispc_hwmod,
-	.clk		= "dss_fck",
+	.clk		= "l3_div_ck",
 	.addr		= omap44xx_dss_dispc_dma_addrs,
 	.user		= OCP_USER_SDMA,
 };
@@ -1415,7 +1518,7 @@ static struct omap_hwmod_addr_space omap44xx_dss_dsi1_dma_addrs[] = {
 static struct omap_hwmod_ocp_if omap44xx_l3_main_2__dss_dsi1 = {
 	.master		= &omap44xx_l3_main_2_hwmod,
 	.slave		= &omap44xx_dss_dsi1_hwmod,
-	.clk		= "dss_fck",
+	.clk		= "l3_div_ck",
 	.addr		= omap44xx_dss_dsi1_dma_addrs,
 	.user		= OCP_USER_SDMA,
 };
@@ -1492,7 +1595,7 @@ static struct omap_hwmod_addr_space omap44xx_dss_dsi2_dma_addrs[] = {
 static struct omap_hwmod_ocp_if omap44xx_l3_main_2__dss_dsi2 = {
 	.master		= &omap44xx_l3_main_2_hwmod,
 	.slave		= &omap44xx_dss_dsi2_hwmod,
-	.clk		= "dss_fck",
+	.clk		= "l3_div_ck",
 	.addr		= omap44xx_dss_dsi2_dma_addrs,
 	.user		= OCP_USER_SDMA,
 };
@@ -1589,7 +1692,7 @@ static struct omap_hwmod_addr_space omap44xx_dss_hdmi_dma_addrs[] = {
 static struct omap_hwmod_ocp_if omap44xx_l3_main_2__dss_hdmi = {
 	.master		= &omap44xx_l3_main_2_hwmod,
 	.slave		= &omap44xx_dss_hdmi_hwmod,
-	.clk		= "dss_fck",
+	.clk		= "l3_div_ck",
 	.addr		= omap44xx_dss_hdmi_dma_addrs,
 	.user		= OCP_USER_SDMA,
 };
@@ -1681,7 +1784,7 @@ static struct omap_hwmod_addr_space omap44xx_dss_rfbi_dma_addrs[] = {
 static struct omap_hwmod_ocp_if omap44xx_l3_main_2__dss_rfbi = {
 	.master		= &omap44xx_l3_main_2_hwmod,
 	.slave		= &omap44xx_dss_rfbi_hwmod,
-	.clk		= "dss_fck",
+	.clk		= "l3_div_ck",
 	.addr		= omap44xx_dss_rfbi_dma_addrs,
 	.user		= OCP_USER_SDMA,
 };
@@ -1756,7 +1859,7 @@ static struct omap_hwmod_addr_space omap44xx_dss_venc_dma_addrs[] = {
 static struct omap_hwmod_ocp_if omap44xx_l3_main_2__dss_venc = {
 	.master		= &omap44xx_l3_main_2_hwmod,
 	.slave		= &omap44xx_dss_venc_hwmod,
-	.clk		= "dss_fck",
+	.clk		= "l3_div_ck",
 	.addr		= omap44xx_dss_venc_dma_addrs,
 	.user		= OCP_USER_SDMA,
 };
@@ -1798,6 +1901,77 @@ static struct omap_hwmod omap44xx_dss_venc_hwmod = {
 	},
 	.slaves		= omap44xx_dss_venc_slaves,
 	.slaves_cnt	= ARRAY_SIZE(omap44xx_dss_venc_slaves),
+};
+
+/*
+ * 'fdif' class
+ * face detection hw accelerator module
+ */
+
+static struct omap_hwmod_class_sysconfig omap44xx_fdif_sysc = {
+	.rev_offs	= 0x0000,
+	.sysc_offs	= 0x0010,
+	.sysc_flags	= (SYSC_HAS_MIDLEMODE | SYSC_HAS_RESET_STATUS |
+			   SYSC_HAS_SIDLEMODE | SYSC_HAS_SOFTRESET),
+	.idlemodes	= (SIDLE_FORCE | SIDLE_NO | SIDLE_SMART |
+			   MSTANDBY_FORCE | MSTANDBY_NO | MSTANDBY_SMART),
+	.sysc_fields	= &omap_hwmod_sysc_type2,
+};
+
+static struct omap_hwmod_class omap44xx_fdif_hwmod_class = {
+	.name = "fdif",
+	.sysc = &omap44xx_fdif_sysc,
+};
+
+/* fdif */
+static struct omap_hwmod_irq_info omap44xx_fdif_irqs[] = {
+	{ .irq = 69 + OMAP44XX_IRQ_GIC_START },
+	{ .irq = -1 }
+};
+
+/* fdif master ports */
+static struct omap_hwmod_ocp_if *omap44xx_fdif_masters[] = {
+	&omap44xx_fdif__l3_main_2,
+};
+
+static struct omap_hwmod_addr_space omap44xx_fdif_addrs[] = {
+	{
+		.pa_start	= 0x4a10a000,
+		.pa_end		= 0x4a10a1ff,
+		.flags		= ADDR_TYPE_RT
+	},
+	{ }
+};
+
+/* l4_cfg -> fdif */
+static struct omap_hwmod_ocp_if omap44xx_l3_main_2__fdif = {
+	.master		= &omap44xx_l3_main_2_hwmod,
+	.slave		= &omap44xx_fdif_hwmod,
+	.clk		= "l3_div_ck",
+	.addr		= omap44xx_fdif_addrs,
+	.user		= OCP_USER_MPU | OCP_USER_SDMA,
+};
+
+/* fdif slave ports */
+static struct omap_hwmod_ocp_if *omap44xx_fdif_slaves[] = {
+	&omap44xx_l3_main_2__fdif,
+};
+
+static struct omap_hwmod omap44xx_fdif_hwmod = {
+	.name		= "fdif",
+	.class		= &omap44xx_fdif_hwmod_class,
+	.clkdm_name	= "iss_clkdm",
+	.mpu_irqs	= omap44xx_fdif_irqs,
+	.main_clk	= "fdif_fck",
+	.prcm = {
+		.omap4 = {
+			.clkctrl_offs = OMAP4_CM_CAM_FDIF_CLKCTRL_OFFSET,
+		},
+	},
+	.slaves		= omap44xx_fdif_slaves,
+	.slaves_cnt	= ARRAY_SIZE(omap44xx_fdif_slaves),
+	.masters	= omap44xx_fdif_masters,
+	.masters_cnt	= ARRAY_SIZE(omap44xx_fdif_masters),
 };
 
 /*
@@ -2262,7 +2436,8 @@ static struct omap_hwmod_class omap44xx_i2c_hwmod_class = {
 };
 
 static struct omap_i2c_dev_attr i2c_dev_attr = {
-	.flags	= OMAP_I2C_FLAG_BUS_SHIFT_NONE,
+	.flags	= OMAP_I2C_FLAG_BUS_SHIFT_NONE |
+			OMAP_I2C_FLAG_RESET_REGS_POSTIDLE,
 };
 
 /* i2c1 */
@@ -2494,6 +2669,14 @@ static struct omap_hwmod omap44xx_i2c4_hwmod = {
  * imaging processor unit
  */
 
+/* ipu mmu attr */
+
+static struct omap_mmu_dev_attr omap44xx_ipu_mmu_dev_attr = {
+	.da_start = 0x0,
+	.da_end = 0xfffff000,
+	.nr_tlb_entries = 32,
+};
+
 static struct omap_hwmod_class omap44xx_ipu_hwmod_class = {
 	.name	= "ipu",
 };
@@ -2516,16 +2699,27 @@ static struct omap_hwmod_rst_info omap44xx_ipu_resets[] = {
 	{ .name = "mmu_cache", .rst_shift = 2 },
 };
 
+static struct omap_hwmod_addr_space omap44xx_ipu_addrs[] = {
+	{
+		.pa_start       = 0x55082000,
+		.pa_end         = 0x550820ff,
+		.flags          = ADDR_TYPE_RT
+	},
+	{ }
+};
+
 /* ipu master ports */
 static struct omap_hwmod_ocp_if *omap44xx_ipu_masters[] = {
 	&omap44xx_ipu__l3_main_2,
 };
+
 
 /* l3_main_2 -> ipu */
 static struct omap_hwmod_ocp_if omap44xx_l3_main_2__ipu = {
 	.master		= &omap44xx_l3_main_2_hwmod,
 	.slave		= &omap44xx_ipu_hwmod,
 	.clk		= "l3_div_ck",
+	.addr		= omap44xx_ipu_addrs,
 	.user		= OCP_USER_MPU | OCP_USER_SDMA,
 };
 
@@ -2539,6 +2733,7 @@ static struct omap_hwmod omap44xx_ipu_c0_hwmod = {
 	.name		= "ipu_c0",
 	.class		= &omap44xx_ipu_hwmod_class,
 	.clkdm_name	= "ducati_clkdm",
+	.main_clk	= "ipu_fck",
 	.flags		= HWMOD_INIT_NO_RESET,
 	.rst_lines	= omap44xx_ipu_c0_resets,
 	.rst_lines_cnt	= ARRAY_SIZE(omap44xx_ipu_c0_resets),
@@ -2554,6 +2749,7 @@ static struct omap_hwmod omap44xx_ipu_c1_hwmod = {
 	.name		= "ipu_c1",
 	.class		= &omap44xx_ipu_hwmod_class,
 	.clkdm_name	= "ducati_clkdm",
+	.main_clk	= "ipu_fck",
 	.flags		= HWMOD_INIT_NO_RESET,
 	.rst_lines	= omap44xx_ipu_c1_resets,
 	.rst_lines_cnt	= ARRAY_SIZE(omap44xx_ipu_c1_resets),
@@ -2566,7 +2762,7 @@ static struct omap_hwmod omap44xx_ipu_c1_hwmod = {
 
 static struct omap_hwmod omap44xx_ipu_hwmod = {
 	.name		= "ipu",
-	.class		= &omap44xx_ipu_hwmod_class,
+	.class		= &omap44xx_mmu_hwmod_class,
 	.clkdm_name	= "ducati_clkdm",
 	.mpu_irqs	= omap44xx_ipu_irqs,
 	.rst_lines	= omap44xx_ipu_resets,
@@ -2580,6 +2776,7 @@ static struct omap_hwmod omap44xx_ipu_hwmod = {
 			.modulemode   = MODULEMODE_HWCTRL,
 		},
 	},
+	.dev_attr	= &omap44xx_ipu_mmu_dev_attr,
 	.slaves		= omap44xx_ipu_slaves,
 	.slaves_cnt	= ARRAY_SIZE(omap44xx_ipu_slaves),
 	.masters	= omap44xx_ipu_masters,
@@ -2713,8 +2910,16 @@ static struct omap_hwmod_rst_info omap44xx_iva_seq1_resets[] = {
 	{ .name = "seq1", .rst_shift = 1 },
 };
 
+/* iva -> sl2if */
+static struct omap_hwmod_ocp_if omap44xx_iva__sl2if = {
+	.master		= &omap44xx_iva_hwmod,
+	.slave		= &omap44xx_sl2if_hwmod,
+	.clk		= "dpll_iva_m5x2_ck",
+};
+
 /* iva master ports */
 static struct omap_hwmod_ocp_if *omap44xx_iva_masters[] = {
+	&omap44xx_iva__sl2if,
 	&omap44xx_iva__l3_main_2,
 	&omap44xx_iva__l3_instr,
 };
@@ -2793,6 +2998,45 @@ static struct omap_hwmod omap44xx_iva_hwmod = {
 	.slaves_cnt	= ARRAY_SIZE(omap44xx_iva_slaves),
 	.masters	= omap44xx_iva_masters,
 	.masters_cnt	= ARRAY_SIZE(omap44xx_iva_masters),
+};
+
+/*
+ * 'sl2if' class
+ * shared level 2 memory interface
+ */
+
+static struct omap_hwmod_class omap44xx_sl2if_hwmod_class = {
+	.name = "sl2if",
+};
+
+/* sl2if */
+/* l3_main_2 -> sl2if */
+static struct omap_hwmod_ocp_if omap44xx_l3_main_2__sl2if = {
+	.master		= &omap44xx_l3_main_2_hwmod,
+	.slave		= &omap44xx_sl2if_hwmod,
+	.clk		= "l3_div_ck",
+	.user		= OCP_USER_MPU | OCP_USER_SDMA,
+};
+
+/* sl2if slave ports */
+static struct omap_hwmod_ocp_if *omap44xx_sl2if_slaves[] = {
+	&omap44xx_l3_main_2__sl2if,
+	&omap44xx_iva__sl2if,
+	&omap44xx_dsp__sl2if,
+};
+
+static struct omap_hwmod omap44xx_sl2if_hwmod = {
+	.name		= "sl2if",
+	.class		= &omap44xx_sl2if_hwmod_class,
+	.clkdm_name	= "ivahd_clkdm",
+	.main_clk	= "sl2if_ick",
+	.prcm = {
+		.omap4 = {
+			.clkctrl_offs = OMAP4_CM_IVAHD_SL2_CLKCTRL_OFFSET,
+		},
+	},
+	.slaves		= omap44xx_sl2if_slaves,
+	.slaves_cnt	= ARRAY_SIZE(omap44xx_sl2if_slaves),
 };
 
 /*
@@ -2930,6 +3174,102 @@ static struct omap_hwmod omap44xx_mailbox_hwmod = {
 };
 
 /*
+ * 'mcasp' class
+ * multi channel audio serial port controller
+ */
+
+static struct omap_hwmod_class_sysconfig omap44xx_mcasp_sysc = {
+	.sysc_offs	= 0x0004,
+	.sysc_flags	= SYSC_HAS_SIDLEMODE,
+	.idlemodes	= (SIDLE_FORCE | SIDLE_NO | SIDLE_SMART),
+	.sysc_fields	= &omap_hwmod_sysc_type3,
+};
+
+static struct omap_hwmod_class omap44xx_mcasp_hwmod_class = {
+	.name = "mcasp",
+	.sysc = &omap44xx_mcasp_sysc,
+};
+
+/* mcasp */
+static struct omap_hwmod omap44xx_mcasp_hwmod;
+static struct omap_hwmod_irq_info omap44xx_mcasp_irqs[] = {
+	{ .irq = 109 + OMAP44XX_IRQ_GIC_START },
+};
+
+static struct omap_hwmod_dma_info omap44xx_mcasp_sdma_reqs[] = {
+	{ .name = "tx", .dma_req = 7 + OMAP44XX_DMA_REQ_START },
+};
+
+static struct omap_hwmod_addr_space omap44xx_mcasp_addrs[] = {
+	{
+		.pa_start	= 0x40128000,
+		.pa_end         = 0x40128000 + SZ_4K - 1, /* McASP CFG Port */
+		.flags          = ADDR_TYPE_RT
+	},
+	{
+		.pa_start       = 0x4012A000,
+		.pa_end         = 0x4012A000 + SZ_4K - 1, /* McASP Data Port */
+		.flags          = ADDR_TYPE_RT
+	},
+};
+
+/* l4_abe -> mcasp */
+static struct omap_hwmod_ocp_if omap44xx_l4_abe__mcasp = {
+	.master		= &omap44xx_l4_abe_hwmod,
+	.slave		= &omap44xx_mcasp_hwmod,
+	.clk		= "ocp_abe_iclk",
+	.addr		= omap44xx_mcasp_addrs,
+	.user		= OCP_USER_MPU,
+};
+
+static struct omap_hwmod_addr_space omap44xx_mcasp_dma_addrs[] = {
+	{
+		.pa_start	= 0x49028000,
+		.pa_end         = 0x49028000 + SZ_4K - 1, /* McASP CFG Port */
+		.flags          = ADDR_TYPE_RT
+	},
+	{
+		.pa_start       = 0x4902A000,
+		.pa_end         = 0x4902A000 + SZ_4K - 1, /* McASP Data Port */
+		.flags          = ADDR_TYPE_RT
+	},
+};
+
+/* l4_abe -> mcasp (dma) */
+static struct omap_hwmod_ocp_if omap44xx_l4_abe__mcasp_dma = {
+	.master		= &omap44xx_l4_abe_hwmod,
+	.slave		= &omap44xx_mcasp_hwmod,
+	.clk		= "ocp_abe_iclk",
+	.addr		= omap44xx_mcasp_dma_addrs,
+	.user		= OCP_USER_SDMA,
+};
+
+/* mcasp1 slave ports */
+static struct omap_hwmod_ocp_if *omap44xx_mcasp_slaves[] = {
+	&omap44xx_l4_abe__mcasp,
+	&omap44xx_l4_abe__mcasp_dma,
+};
+
+static struct omap_hwmod omap44xx_mcasp_hwmod = {
+	.name		= "mcasp",
+	.class		= &omap44xx_mcasp_hwmod_class,
+	.clkdm_name	= "abe_clkdm",
+	.flags		= HWMOD_SWSUP_SIDLE,
+	.mpu_irqs	= omap44xx_mcasp_irqs,
+	.sdma_reqs	= omap44xx_mcasp_sdma_reqs,
+	.main_clk	= "mcasp_fck",
+	.prcm = {
+		.omap4 = {
+			.clkctrl_offs = OMAP4_CM1_ABE_MCASP_CLKCTRL_OFFSET,
+			.context_offs = OMAP4_RM_ABE_MCASP_CONTEXT_OFFSET,
+			.modulemode   = MODULEMODE_SWCTRL,
+		},
+	},
+	.slaves		= omap44xx_mcasp_slaves,
+	.slaves_cnt	= ARRAY_SIZE(omap44xx_mcasp_slaves),
+};
+
+/*
  * 'mcbsp' class
  * multi channel buffered serial port controller
  */
@@ -2951,7 +3291,7 @@ static struct omap_hwmod_class omap44xx_mcbsp_hwmod_class = {
 /* mcbsp1 */
 static struct omap_hwmod omap44xx_mcbsp1_hwmod;
 static struct omap_hwmod_irq_info omap44xx_mcbsp1_irqs[] = {
-	{ .irq = 17 + OMAP44XX_IRQ_GIC_START },
+	{ .name = "common", .irq = 17 + OMAP44XX_IRQ_GIC_START },
 	{ .irq = -1 }
 };
 
@@ -3033,7 +3373,7 @@ static struct omap_hwmod omap44xx_mcbsp1_hwmod = {
 /* mcbsp2 */
 static struct omap_hwmod omap44xx_mcbsp2_hwmod;
 static struct omap_hwmod_irq_info omap44xx_mcbsp2_irqs[] = {
-	{ .irq = 22 + OMAP44XX_IRQ_GIC_START },
+	{ .name = "common", .irq = 22 + OMAP44XX_IRQ_GIC_START },
 	{ .irq = -1 }
 };
 
@@ -3115,7 +3455,7 @@ static struct omap_hwmod omap44xx_mcbsp2_hwmod = {
 /* mcbsp3 */
 static struct omap_hwmod omap44xx_mcbsp3_hwmod;
 static struct omap_hwmod_irq_info omap44xx_mcbsp3_irqs[] = {
-	{ .irq = 23 + OMAP44XX_IRQ_GIC_START },
+	{ .name = "common", .irq = 23 + OMAP44XX_IRQ_GIC_START },
 	{ .irq = -1 }
 };
 
@@ -3197,7 +3537,7 @@ static struct omap_hwmod omap44xx_mcbsp3_hwmod = {
 /* mcbsp4 */
 static struct omap_hwmod omap44xx_mcbsp4_hwmod;
 static struct omap_hwmod_irq_info omap44xx_mcbsp4_irqs[] = {
-	{ .irq = 16 + OMAP44XX_IRQ_GIC_START },
+	{ .name = "common", .irq = 16 + OMAP44XX_IRQ_GIC_START },
 	{ .irq = -1 }
 };
 
@@ -3972,6 +4312,7 @@ static struct omap_hwmod omap44xx_mpu_hwmod = {
 	.masters	= omap44xx_mpu_masters,
 	.masters_cnt	= ARRAY_SIZE(omap44xx_mpu_masters),
 };
+
 
 /*
  * 'smartreflex' class
@@ -5331,6 +5672,111 @@ static struct omap_hwmod omap44xx_wd_timer3_hwmod = {
 };
 
 /*
+ * 'emif' class
+ * external memory interface no1
+ */
+
+static struct omap_hwmod_class omap44xx_emif_hwmod_class = {
+	.name	= "emif",
+};
+
+/* emif1 */
+static struct omap_hwmod omap44xx_emif1_hwmod;
+static struct omap_hwmod_irq_info omap44xx_emif1_irqs[] = {
+	{ .irq = 110 + OMAP44XX_IRQ_GIC_START },
+	{ .irq = -1 }
+};
+
+static struct omap_hwmod_addr_space omap44xx_emif1_addrs[] = {
+	{
+		.pa_start	= 0x4c000000,
+		.pa_end		= 0x4c0000ff,
+		.flags		= ADDR_TYPE_RT
+	},
+	{ }
+};
+
+/* emif_fw -> emif1 */
+static struct omap_hwmod_ocp_if omap44xx_emif_fw__emif1 = {
+	.master		= &omap44xx_emif_fw_hwmod,
+	.slave		= &omap44xx_emif1_hwmod,
+	.clk		= "l3_div_ck",
+	.addr		= omap44xx_emif1_addrs,
+	.user		= OCP_USER_MPU | OCP_USER_SDMA,
+};
+
+/* emif1 slave ports */
+static struct omap_hwmod_ocp_if *omap44xx_emif1_slaves[] = {
+	&omap44xx_emif_fw__emif1,
+};
+
+static struct omap_hwmod omap44xx_emif1_hwmod = {
+	.name		= "emif1",
+	.class		= &omap44xx_emif_hwmod_class,
+	.flags		= HWMOD_INIT_NO_IDLE | HWMOD_INIT_NO_RESET,
+	.mpu_irqs	= omap44xx_emif1_irqs,
+	.main_clk	= "emif1_fck",
+	.clkdm_name	= "l3_emif_clkdm",
+	.prcm		= {
+		.omap4 = {
+			.clkctrl_offs = OMAP4_CM_MEMIF_EMIF_1_CLKCTRL_OFFSET,
+			.context_offs = OMAP4_RM_MEMIF_EMIF_1_CONTEXT_OFFSET,
+			.modulemode   = MODULEMODE_HWCTRL,
+		},
+	},
+	.slaves		= omap44xx_emif1_slaves,
+	.slaves_cnt	= ARRAY_SIZE(omap44xx_emif1_slaves),
+};
+
+/* emif2 */
+static struct omap_hwmod omap44xx_emif2_hwmod;
+static struct omap_hwmod_irq_info omap44xx_emif2_irqs[] = {
+	{ .irq = 111 + OMAP44XX_IRQ_GIC_START },
+	{ .irq = -1 }
+};
+
+static struct omap_hwmod_addr_space omap44xx_emif2_addrs[] = {
+	{
+		.pa_start	= 0x4d000000,
+		.pa_end		= 0x4d0000ff,
+		.flags		= ADDR_TYPE_RT
+	},
+	{ }
+};
+
+/* emif_fw -> emif2 */
+static struct omap_hwmod_ocp_if omap44xx_emif_fw__emif2 = {
+	.master		= &omap44xx_emif_fw_hwmod,
+	.slave		= &omap44xx_emif2_hwmod,
+	.clk		= "l3_div_ck",
+	.addr		= omap44xx_emif2_addrs,
+	.user		= OCP_USER_MPU | OCP_USER_SDMA,
+};
+
+/* emif2 slave ports */
+static struct omap_hwmod_ocp_if *omap44xx_emif2_slaves[] = {
+	&omap44xx_emif_fw__emif2,
+};
+
+static struct omap_hwmod omap44xx_emif2_hwmod = {
+	.name		= "emif2",
+	.class		= &omap44xx_emif_hwmod_class,
+	.flags		= HWMOD_INIT_NO_IDLE | HWMOD_INIT_NO_RESET,
+	.mpu_irqs	= omap44xx_emif2_irqs,
+	.main_clk	= "emif2_fck",
+	.clkdm_name	= "l3_emif_clkdm",
+	.prcm		= {
+		.omap4 = {
+			.clkctrl_offs = OMAP4_CM_MEMIF_EMIF_1_CLKCTRL_OFFSET,
+			.context_offs = OMAP4_RM_MEMIF_EMIF_1_CONTEXT_OFFSET,
+			.modulemode   = MODULEMODE_HWCTRL,
+		}
+	},
+	.slaves		= omap44xx_emif2_slaves,
+	.slaves_cnt	= ARRAY_SIZE(omap44xx_emif2_slaves),
+};
+
+/*
  * 'usb_host_hs' class
  * high-speed multi-port usb host controller
  */
@@ -5538,6 +5984,8 @@ static __initdata struct omap_hwmod *omap44xx_hwmods[] = {
 
 	/* emif_fw class */
 	&omap44xx_emif_fw_hwmod,
+	&omap44xx_emif1_hwmod,
+	&omap44xx_emif2_hwmod,
 
 	/* l3 class */
 	&omap44xx_l3_instr_hwmod,
@@ -5555,7 +6003,7 @@ static __initdata struct omap_hwmod *omap44xx_hwmods[] = {
 	&omap44xx_mpu_private_hwmod,
 
 	/* aess class */
-/*	&omap44xx_aess_hwmod, */
+	&omap44xx_aess_hwmod,
 
 	/* bandgap class */
 	&omap44xx_bandgap_hwmod,
@@ -5605,18 +6053,27 @@ static __initdata struct omap_hwmod *omap44xx_hwmods[] = {
 	&omap44xx_ipu_c1_hwmod,
 
 	/* iss class */
-/*	&omap44xx_iss_hwmod, */
+	&omap44xx_iss_hwmod,
+
+	/* fdif class */
+	&omap44xx_fdif_hwmod,
 
 	/* iva class */
 	&omap44xx_iva_hwmod,
 	&omap44xx_iva_seq0_hwmod,
 	&omap44xx_iva_seq1_hwmod,
 
+	/* sl2if class */
+	&omap44xx_sl2if_hwmod,
+
 	/* kbd class */
 	&omap44xx_kbd_hwmod,
 
 	/* mailbox class */
 	&omap44xx_mailbox_hwmod,
+
+	/* mcasp class */
+	&omap44xx_mcasp_hwmod,
 
 	/* mcbsp class */
 	&omap44xx_mcbsp1_hwmod,

@@ -113,10 +113,10 @@ static void omap3_core_save_context(void)
 	/* Save the Interrupt controller context */
 	omap_intc_save_context();
 	/* Save the GPMC context */
-	omap3_gpmc_save_context();
+	omap_gpmc_save_context();
 	/* Save the system control module context, padconf already save above*/
 	omap3_control_save_context();
-	omap_dma_global_context_save();
+	omap2_dma_context_save();
 }
 
 static void omap3_core_restore_context(void)
@@ -124,10 +124,10 @@ static void omap3_core_restore_context(void)
 	/* Restore the control module context, padconf restored by h/w */
 	omap3_control_restore_context();
 	/* Restore the GPMC context */
-	omap3_gpmc_restore_context();
+	omap_gpmc_restore_context();
 	/* Restore the interrupt controller context */
 	omap_intc_restore_context();
-	omap_dma_global_context_restore();
+	omap2_dma_context_restore();
 }
 
 /*
@@ -529,8 +529,6 @@ static void __init omap3_d2d_idle(void)
 
 static void __init prcm_setup_regs(void)
 {
-	u32 omap3630_en_uart4_mask = cpu_is_omap3630() ?
-					OMAP3630_EN_UART4_MASK : 0;
 	u32 omap3630_grpsel_uart4_mask = cpu_is_omap3630() ?
 					OMAP3630_GRPSEL_UART4_MASK : 0;
 
@@ -562,13 +560,11 @@ static void __init prcm_setup_regs(void)
 				OMAP3430_DSS_MOD, PM_WKEN);
 
 	/* Enable wakeups in PER */
-	omap2_prm_write_mod_reg(omap3630_en_uart4_mask |
-			  OMAP3430_EN_GPIO2_MASK | OMAP3430_EN_GPIO3_MASK |
-			  OMAP3430_EN_GPIO4_MASK | OMAP3430_EN_GPIO5_MASK |
-			  OMAP3430_EN_GPIO6_MASK | OMAP3430_EN_UART3_MASK |
-			  OMAP3430_EN_MCBSP2_MASK | OMAP3430_EN_MCBSP3_MASK |
-			  OMAP3430_EN_MCBSP4_MASK,
-			  OMAP3430_PER_MOD, PM_WKEN);
+	omap2_prm_write_mod_reg(OMAP3430_EN_GPIO2_MASK |
+			OMAP3430_EN_GPIO3_MASK | OMAP3430_EN_GPIO4_MASK |
+			OMAP3430_EN_GPIO5_MASK | OMAP3430_EN_GPIO6_MASK |
+			OMAP3430_EN_MCBSP2_MASK | OMAP3430_EN_MCBSP3_MASK |
+			OMAP3430_EN_MCBSP4_MASK, OMAP3430_PER_MOD, PM_WKEN);
 	/* and allow them to wake up MPU */
 	omap2_prm_write_mod_reg(omap3630_grpsel_uart4_mask |
 			  OMAP3430_GRPSEL_GPIO2_MASK |
@@ -786,9 +782,9 @@ static int __init omap3_pm_init(void)
 		local_irq_disable();
 		local_fiq_disable();
 
-		omap_dma_global_context_save();
+		omap2_dma_context_save();
 		omap3_save_secure_ram_context();
-		omap_dma_global_context_restore();
+		omap2_dma_context_restore();
 
 		local_irq_enable();
 		local_fiq_enable();

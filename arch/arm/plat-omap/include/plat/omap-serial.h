@@ -42,10 +42,10 @@
 #define OMAP_UART_WER_MOD_WKUP	0X7F
 
 /* Enable XON/XOFF flow control on output */
-#define OMAP_UART_SW_TX		0x04
+#define OMAP_UART_SW_TX		0x8
 
 /* Enable XON/XOFF flow control on input */
-#define OMAP_UART_SW_RX		0x04
+#define OMAP_UART_SW_RX		0x2
 
 #define OMAP_UART_SYSC_RESET	0X07
 #define OMAP_UART_TCR_TRIG	0X0F
@@ -54,18 +54,22 @@
 
 #define OMAP_UART_DMA_CH_FREE	-1
 
-#define OMAP_MAX_HSUART_PORTS	4
+#define OMAP_MAX_HSUART_PORTS	6
 
 #define MSR_SAVE_FLAGS		UART_MSR_ANY_DELTA
 
 #define UART_ERRATA_i202_MDR1_ACCESS	BIT(0)
 #define UART_ERRATA_i291_DMA_FORCEIDLE	BIT(1)
 
+#define OMAP_UART_TX_WAKEUP_EN	BIT(7)
+
+/* Feature flags */
+#define OMAP_UART_WER_HAS_TX_WAKEUP	BIT(0)
+
 struct omap_uart_port_info {
 	bool			dma_enabled;	/* To specify DMA Mode */
 	unsigned int		uartclk;	/* UART clock rate */
 	upf_t			flags;		/* UPF_* flags */
-	u32			errata;
 	unsigned int		dma_rx_buf_size;
 	unsigned int		dma_rx_timeout;
 	unsigned int		autosuspend_timeout;
@@ -117,8 +121,10 @@ struct uart_omap_port {
 	unsigned char		dlh;
 	unsigned char		mdr1;
 	unsigned char		scr;
+	unsigned char		wer;
 
 	int			use_dma;
+	bool			suspended;
 	/*
 	 * Some bits in registers are cleared on a read, so they must
 	 * be saved whenever the register is read but the bits will not
@@ -128,9 +134,10 @@ struct uart_omap_port {
 	unsigned char		msr_saved_flags;
 	char			name[20];
 	unsigned long		port_activity;
-	u32			context_loss_cnt;
+	int			context_loss_cnt;
 	u32			errata;
-	u8			wakeups_enabled;
+
+	u32			features;
 
 	struct pm_qos_request	pm_qos_request;
 	u32			latency;
@@ -138,4 +145,6 @@ struct uart_omap_port {
 	struct work_struct	qos_work;
 };
 
+int omap_serial_ext_uart_enable(u8 port_id);
+int omap_serial_ext_uart_disable(u8 port_id);
 #endif /* __OMAP_SERIAL_H__ */

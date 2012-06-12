@@ -188,6 +188,13 @@ static int uart_port_startup(struct tty_struct *tty, struct uart_state *state,
 	}
 
 	/*
+	 * Now with port open enable any platform specific wakeup
+	 * capability for the port if available.
+	 */
+	if (uport->ops->set_wake)
+		uport->ops->set_wake(uport, true);
+
+	/*
 	 * This is to allow setserial on this port. People may want to set
 	 * port/irq/type and then reconfigure the port properly if it failed
 	 * now.
@@ -1430,6 +1437,13 @@ static void uart_port_shutdown(struct tty_port *port)
 	uport->ops->shutdown(uport);
 
 	/*
+	 * now port is closed disable any platform
+	 * specific wakeup capability that might be enabled.
+	 */
+	if (uport->ops->set_wake)
+		uport->ops->set_wake(uport, false);
+
+	/*
 	 * Ensure that the IRQ handler isn't running on another CPU.
 	 */
 	synchronize_irq(uport->irq);
@@ -1742,6 +1756,12 @@ struct baud_rates {
 };
 
 static const struct baud_rates baud_rates[] = {
+#ifdef CONFIG_MACH_OMAP_5430ZEBU
+	/* 3M baudrate for zebu only,
+	 * to speed zebu boot
+	 */
+	{ 3000000, B3000000 },
+#endif
 	{ 921600, B921600 },
 	{ 460800, B460800 },
 	{ 230400, B230400 },
